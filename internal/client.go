@@ -8,7 +8,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
 	fosite "github.com/ory/fosite"
 )
 
@@ -47,6 +46,34 @@ func (m *MockClient) GetAudience() fosite.Arguments {
 func (mr *MockClientMockRecorder) GetAudience() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAudience", reflect.TypeOf((*MockClient)(nil).GetAudience))
+}
+
+// GetCertificateSubjectFieldName mocks base method
+func (m *MockClient) GetCertificateSubjectFieldName() fosite.CertificateSubjectFieldName {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCertificateSubjectFieldName")
+	ret0, _ := ret[0].(fosite.CertificateSubjectFieldName)
+	return ret0
+}
+
+// GetCertificateSubjectFieldName indicates an expected call of GetCertificateSubjectFieldName
+func (mr *MockClientMockRecorder) GetCertificateSubjectFieldName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCertificateSubjectFieldName", reflect.TypeOf((*MockClient)(nil).GetCertificateSubjectFieldName))
+}
+
+// GetCertificateSubjectValue mocks base method
+func (m *MockClient) GetCertificateSubjectValue() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCertificateSubjectValue")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetCertificateSubjectValue indicates an expected call of GetCertificateSubjectValue
+func (mr *MockClientMockRecorder) GetCertificateSubjectValue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCertificateSubjectValue", reflect.TypeOf((*MockClient)(nil).GetCertificateSubjectValue))
 }
 
 // GetGrantTypes mocks base method

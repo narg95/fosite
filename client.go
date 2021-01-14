@@ -50,7 +50,34 @@ type Client interface {
 
 	// GetAudience returns the allowed audience(s) for this client.
 	GetAudience() Arguments
+
+	// GetCertificateSubjectFieldName returns the certificate's field name
+	// containing the subject to verify in tls authentication.
+	// Expected values are:
+	// - tls_client_auth_subject_dn
+	// - tls_client_auth_san_dns
+	// - tls_client_auth_san_uri
+	// - tls_client_auth_san_ip
+	// - tls_client_auth_san_email
+	// Source: https://tools.ietf.org/html/rfc8705#section-9.5
+	GetCertificateSubjectFieldName() CertificateSubjectFieldName
+
+	// GetCertificateSubjectValue returns the expected certificate's subject value
+	// to assert in tls authentication
+	GetCertificateSubjectValue() string
 }
+
+// CertificateSubjectFieldName contains a valid certificate's subject field name
+// for TLS authentication as specified in https://tools.ietf.org/html/rfc8705#section-9.5
+type CertificateSubjectFieldName string
+
+const (
+	DNField    = "tls_client_auth_subject_dn"
+	DNSField   = "tls_client_auth_san_dns"
+	URIField   = "tls_client_auth_san_uri"
+	IPField    = "tls_client_auth_san_ip"
+	EMAILField = "tls_client_auth_san_email"
+)
 
 // OpenIDConnectClient represents a client capable of performing OpenID Connect requests.
 type OpenIDConnectClient interface {
@@ -72,7 +99,7 @@ type OpenIDConnectClient interface {
 	GetRequestObjectSigningAlgorithm() string
 
 	// Requested Client Authentication method for the Token Endpoint. The options are client_secret_post,
-	// client_secret_basic, client_secret_jwt, private_key_jwt, and none.
+	// client_secret_basic, client_secret_jwt, private_key_jwt, tls_client_auth, and none.
 	GetTokenEndpointAuthMethod() string
 
 	// JWS [JWS] alg algorithm [JWA] that MUST be used for signing the JWT [JWT] used to authenticate the
@@ -88,14 +115,16 @@ type ResponseModeClient interface {
 
 // DefaultClient is a simple default implementation of the Client interface.
 type DefaultClient struct {
-	ID            string   `json:"id"`
-	Secret        []byte   `json:"client_secret,omitempty"`
-	RedirectURIs  []string `json:"redirect_uris"`
-	GrantTypes    []string `json:"grant_types"`
-	ResponseTypes []string `json:"response_types"`
-	Scopes        []string `json:"scopes"`
-	Audience      []string `json:"audience"`
-	Public        bool     `json:"public"`
+	ID                          string   `json:"id"`
+	Secret                      []byte   `json:"client_secret,omitempty"`
+	RedirectURIs                []string `json:"redirect_uris"`
+	GrantTypes                  []string `json:"grant_types"`
+	ResponseTypes               []string `json:"response_types"`
+	Scopes                      []string `json:"scopes"`
+	Audience                    []string `json:"audience"`
+	Public                      bool     `json:"public"`
+	CertificateSubjectFieldName string   `json:"cert_subject_field_name"`
+	CertificateSubjectValue     string   `json:"cert_subject_value"`
 }
 
 type DefaultOpenIDConnectClient struct {
@@ -159,6 +188,14 @@ func (c *DefaultClient) GetResponseTypes() Arguments {
 		return Arguments{"code"}
 	}
 	return Arguments(c.ResponseTypes)
+}
+
+func (c *DefaultClient) GetCertificateSubjectFieldName() CertificateSubjectFieldName {
+	return CertificateSubjectFieldName(c.CertificateSubjectFieldName)
+}
+
+func (c *DefaultClient) GetCertificateSubjectValue() string {
+	return c.CertificateSubjectValue
 }
 
 func (c *DefaultOpenIDConnectClient) GetJSONWebKeysURI() string {

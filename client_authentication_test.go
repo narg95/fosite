@@ -25,8 +25,11 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -125,6 +128,12 @@ func TestAuthenticateClient(t *testing.T) {
 			},
 		},
 	}
+
+	// load x509 test certificate
+	block, _ := pem.Decode([]byte(fooCert))
+	assert.NotNil(t, block, "Invalid PEM certificate")
+	fooX509Cert, err := x509.ParseCertificate(block.Bytes)
+	assert.NoError(t, err)
 
 	var h http.HandlerFunc
 	h = func(w http.ResponseWriter, r *http.Request) {
@@ -484,6 +493,71 @@ func TestAuthenticateClient(t *testing.T) {
 			r:         new(http.Request),
 			expectErr: ErrInvalidClient,
 		},
+		{
+			d: "should fail because client_id was not provided",
+			client: &DefaultOpenIDConnectClient{
+				DefaultClient:           &DefaultClient{ID: "bar"},
+				TokenEndpointAuthMethod: "tls_client_auth"},
+			r: &http.Request{TLS: &tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{fooX509Cert}}},
+			expectErr: ErrInvalidRequest,
+		},
+		{
+			d: "should fail because client_id does not exists",
+			client: &DefaultOpenIDConnectClient{
+				DefaultClient:           &DefaultClient{ID: "foo"},
+				TokenEndpointAuthMethod: "tls_client_auth"},
+			form: url.Values{"client_id": []string{"client_does_not_exists"}},
+			r: &http.Request{TLS: &tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{fooX509Cert}}},
+			expectErr: ErrNotFound,
+		},
+		{
+			d: "should fail because client id field is not supported",
+			client: &DefaultOpenIDConnectClient{DefaultClient: &DefaultClient{
+				ID:                          "foo",
+				CertificateSubjectFieldName: "not_supported_id_field",
+			}, TokenEndpointAuthMethod: "tls_client_auth"},
+			form: url.Values{"client_id": []string{"foo"}},
+			r: &http.Request{TLS: &tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{fooX509Cert}}},
+			expectErr: ErrInvalidClient,
+		},
+		{
+			d: "should fail because certificate does not match expected subject",
+			client: &DefaultOpenIDConnectClient{DefaultClient: &DefaultClient{
+				ID:                          "foo",
+				CertificateSubjectFieldName: "tls_client_auth_subject_dn",
+				CertificateSubjectValue:     "CN=bar",
+			}, TokenEndpointAuthMethod: "tls_client_auth"},
+			form: url.Values{"client_id": []string{"foo"}},
+			r: &http.Request{TLS: &tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{fooX509Cert}}},
+			expectErr: ErrInvalidRequest,
+		},
+		{
+			d: "should fail because client is not set to authenticate via tls",
+			client: &DefaultOpenIDConnectClient{DefaultClient: &DefaultClient{
+				ID:                          "foo",
+				CertificateSubjectFieldName: "tls_client_auth_subject_dn",
+				CertificateSubjectValue:     "CN=foo",
+			}, TokenEndpointAuthMethod: "private_key_jwt"},
+			form: url.Values{"client_id": []string{"foo"}},
+			r: &http.Request{TLS: &tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{fooX509Cert}}},
+			expectErr: ErrInvalidRequest,
+		},
+		{
+			d: "should pass with valid certificate and valid subject match",
+			client: &DefaultOpenIDConnectClient{DefaultClient: &DefaultClient{
+				ID:                          "foo",
+				CertificateSubjectFieldName: "tls_client_auth_subject_dn",
+				CertificateSubjectValue:     "CN=foo",
+			}, TokenEndpointAuthMethod: "tls_client_auth"},
+			form: url.Values{"client_id": []string{"foo"}},
+			r: &http.Request{TLS: &tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{fooX509Cert}}},
+		},
 	} {
 		t.Run(fmt.Sprintf("case=%d/description=%s", k, tc.d), func(t *testing.T) {
 			store := storage.NewMemoryStore()
@@ -560,3 +634,14 @@ func TestAuthenticateClientTwice(t *testing.T) {
 	assert.EqualError(t, err, ErrJTIKnown.Error())
 	assert.Nil(t, c)
 }
+
+const fooCert = `-----BEGIN CERTIFICATE-----
+MIIBczCCAR2gAwIBAgIUdbmXx4t3Rfys7oA4cJutAyz6J0owDQYJKoZIhvcNAQEL
+BQAwDjEMMAoGA1UEAwwDZm9vMB4XDTIxMDExNDEwNDczOFoXDTIyMDExNDEwNDcz
+OFowDjEMMAoGA1UEAwwDZm9vMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAKLWvWyP
+y+Khrj5LEpjyik7QWBgTYEW6I+VaIbb0ggEoB+4TM4CzIlJGXcYEt9qrA/m3ZFCp
+4v3RvcEULoe2FJcCAwEAAaNTMFEwHQYDVR0OBBYEFGNOlWmzBa8UGlEF3f2i0YWF
+/vm0MB8GA1UdIwQYMBaAFGNOlWmzBa8UGlEF3f2i0YWF/vm0MA8GA1UdEwEB/wQF
+MAMBAf8wDQYJKoZIhvcNAQELBQADQQBEeBs01TwYsBZYq0F0Fn43+H3CogrUUOw1
+vOzXikv2hrgWdJBUrDWCufXoNSFPf315g3oVdPP8eDxtT7PaU6BR
+-----END CERTIFICATE-----`

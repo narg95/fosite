@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ory/x/errorsx"
@@ -208,6 +209,11 @@ func (f *Fosite) AuthenticateClient(ctx context.Context, r *http.Request, form u
 		return nil, errorsx.WithStack(ErrInvalidRequest.WithHintf("Unknown client_assertion_type '%s'.", assertionType))
 	}
 
+	// TODO: validate that client and server were configured to accept tls auth
+	if ok := isTLSAuth(r, form); ok {
+		return f.authenticateClientWithTLS(ctx, r, form)
+	}
+
 	clientID, clientSecret, err := clientCredentialsFromRequest(r, form)
 	if err != nil {
 		return nil, err
@@ -238,6 +244,68 @@ func (f *Fosite) AuthenticateClient(ctx context.Context, r *http.Request, form u
 	}
 
 	return client, nil
+}
+
+func (f *Fosite) authenticateClientWithTLS(ctx context.Context, r *http.Request, form url.Values) (Client, error) {
+	clientID := form.Get("client_id")
+	if len(clientID) == 0 {
+		return nil, errorsx.WithStack(ErrInvalidRequest.WithHint("The client_id was not given"))
+	}
+	client, err := f.Store.GetClient(ctx, clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: validate if this validation makes sense,
+	// that is, a OpenIDConnectClient with tls auth
+	if oidcClient, ok := client.(OpenIDConnectClient); ok &&
+		oidcClient.GetTokenEndpointAuthMethod() != "tls_client_auth" {
+		return nil, errorsx.WithStack(ErrInvalidRequest.WithHintf(
+			"This requested OAuth 2.0 client only supports client authentication method '%s', but TLS authentication was requested.", oidcClient.GetTokenEndpointAuthMethod()))
+	}
+
+	// TODO: Support SAN Fields.
+	// Check this for impl. https://github.com/golang/go/blob/2a26f5809e4e80e7d8d4e20b9965efb2eefe71c5/src/crypto/x509/x509.go#L1439-L1456
+	// This first version only supports the DN Subject field
+	IDField := client.GetCertificateSubjectFieldName()
+	if IDField != DNField {
+		return nil, errorsx.WithStack(ErrInvalidClient.WithHintf("Client certificate field not supported: %s", IDField))
+	}
+
+	// this is expected to exists, validation already in isTLS method
+	cert := r.TLS.PeerCertificates[0]
+
+	// TODO: Implement a stronger matching using a RDN Sequence instead
+	// of strings comparisons, which can be error prone or could
+	// provide false positives.
+	// For that the client certificate value must be parsed into
+	// a RDN Sequence based on https://www.ietf.org/rfc/rfc4514.txt,
+	// currently there is no a library, it must be by ourselfs.
+	// Then check if the parsed RDNs are contained in cert.Subject.Names
+	expStr := client.GetCertificateSubjectValue()
+	if !strings.Contains(cert.Subject.String(), expStr) {
+		return nil, errorsx.WithStack(ErrInvalidRequest.
+			WithDebugf("Certificate does not contain expected subject. Given(%s), Expected(%s)",
+				cert.Subject.Names,
+				expStr))
+	}
+
+	// bingo!
+	return client, nil
+}
+
+func isTLSAuth(r *http.Request, form url.Values) bool {
+	// This implementation expects the client certificate in
+	// r.TLS.PeerCertificates[0], which in a conventional mTLS,
+	// is the certificate the connection is verified against.
+	//
+	// Here, it does not matter where the TLS was terminated
+	// as long as the client certificate is set
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		return false
+	}
+
+	return true
 }
 
 func findPublicKey(t *jwt.Token, set *jose.JSONWebKeySet, expectsRSAKey bool) (interface{}, error) {
