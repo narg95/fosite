@@ -1,4 +1,4 @@
-module github.com/ory/fosite
+module github.com/narg95/fosite
 
 // Using replace for reflection libs allows to by pass fosite 0.29 broken dependecie
 // ory/x should be updated to latest version of fosite if possible to avoid
