@@ -282,12 +282,12 @@ func (f *Fosite) authenticateClientWithTLS(ctx context.Context, r *http.Request,
 	// a RDN Sequence based on https://www.ietf.org/rfc/rfc4514.txt,
 	// currently there is no a library, it must be by ourselfs.
 	// Then check if the parsed RDNs are contained in cert.Subject.Names
-	expStr := client.GetCertificateSubjectValue()
-	if !strings.Contains(cert.Subject.String(), expStr) {
-		return nil, errorsx.WithStack(ErrInvalidRequest.
-			WithDebugf("Certificate does not contain expected subject. Given(%s), Expected(%s)",
-				cert.Subject.Names,
-				expStr))
+	exp := client.GetCertificateSubjectValue()
+	given := cert.Subject.String()
+	if !strings.Contains(given, exp) {
+		return nil, errorsx.WithStack(ErrInvalidClient.
+			WithHint("Unexpected client certificate subject").
+			WithDebugf("Expected subject (%s), given(%s)", exp, given))
 	}
 
 	// bingo!
