@@ -24,7 +24,6 @@ package jwt
 import (
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/pborman/uuid"
 )
 
@@ -108,6 +107,6 @@ func (c *IDTokenClaims) Get(key string) interface{} {
 }
 
 // ToMapClaims will return a jwt-go MapClaims representation
-func (c IDTokenClaims) ToMapClaims() jwt.MapClaims {
+func (c IDTokenClaims) ToMapClaims() MapClaims {
 	return c.ToMap()
 }
